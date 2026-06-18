@@ -250,20 +250,25 @@ chmod 600 ~/.kaggle/kaggle.json
 kaggle datasets download -d mlg-ulb/creditcardfraud --unzip -p ~/ml-benchmark/
 ```
 
-### 7.6: Kết quả Benchmark trên `r5.2xlarge`
+### 7.6: Kết quả Benchmark trên `r5.xlarge`
+
+> **Lưu ý:** Tài khoản (Free Tier) bị giới hạn **Standard On-Demand = 8 vCPU**. Vì `r5.2xlarge` (8 vCPU) đã chiếm trọn hạn mức nên Bastion (`t3.micro`) không tạo được. Đã hạ Node xuống **`r5.xlarge` (4 vCPU, 32 GB RAM)** để vẫn giữ kiến trúc đầy đủ (Bastion + Private Node). Dataset dùng bản mirror **OpenML (data_id=1597)** của chính bộ Credit Card Fraud (284,807 dòng, cùng phân phối 492 ca gian lận) để không cần Kaggle API key — cùng dữ liệu, kết quả tương đương.
 
 | Metric | Kết quả |
 |---|---|
-| Thời gian load data | |
-| Thời gian training | |
-| Best iteration | |
-| AUC-ROC | |
-| Accuracy | |
-| F1-Score | |
-| Precision | |
-| Recall | |
-| Inference latency (1 row) | |
-| Inference throughput (1000 rows) | |
+| Thời gian load data | 1.56 s |
+| Thời gian training | 7.79 s |
+| Best iteration (số cây) | 500 |
+| AUC-ROC | 0.9766 |
+| AUC-PR | 0.8697 |
+| Accuracy | 0.99956 |
+| F1-Score | 0.8619 |
+| Precision | 0.9398 |
+| Recall | 0.7959 |
+| Inference latency (1 row) | 0.445 ms |
+| Inference throughput (1000 rows) | 161,600 rows/s |
+
+*(Số liệu đầy đủ được ghi tự động trong `benchmark_result.json`.)*
 
 ### 7.7: Kiểm tra Chi phí sau 1 giờ
 
@@ -294,6 +299,14 @@ Nếu sử dụng phương án CPU + LightGBM, nộp các mục sau (được ch
 3. **Screenshot AWS Billing** sau 1 giờ triển khai, thể hiện EC2 và NAT Gateway.
 4. **Mã nguồn** thư mục `terraform/` đã chỉnh sửa (với `r5.2xlarge`).
 5. **Báo cáo ngắn** (5–10 dòng): so sánh kết quả training time, AUC, inference speed; giải thích lý do phải dùng CPU thay GPU.
+
+### 7.9: Báo cáo ngắn
+
+- **Hạ tầng:** Terraform tạo full stack trong ~5 phút thực tế (VPC, 2 public + 2 private subnet, IGW, **NAT Gateway ~1m38s**, **ALB ~3m28s**, Bastion, Private Node). NAT + ALB chiếm phần lớn thời gian khởi tạo.
+- **Vì sao CPU thay GPU:** Tài khoản mới mặc định khóa quota GPU (G/VT = 0 vCPU) và quota Standard chỉ 8 vCPU. Xin tăng quota thường bị trì hoãn, nên chuyển sang bài toán ML thực tế (LightGBM) trên instance CPU — vẫn đủ quy trình IaC → Cloud → Train → Inference → Billing.
+- **Training time & AUC:** LightGBM huấn luyện 500 cây trên 227,845 dòng chỉ **7.79 s** trên 4 vCPU (không cần GPU). Đạt **AUC-ROC 0.9766**, **AUC-PR 0.870** — rất tốt cho bài toán mất cân bằng cực đoan (gian lận chỉ 0.17%). Precision 0.94 / Recall 0.80 / F1 0.86 ở ngưỡng 0.5.
+- **Inference speed:** Latency 1 dòng ~**0.45 ms**; throughput batch 1000 dòng ~**161,600 dòng/giây**. Gradient boosting suy luận cực nhanh trên CPU, không cần GPU cho tác vụ tabular.
+- **Kết luận:** Với dữ liệu dạng bảng (tabular) và mô hình cây, **CPU là lựa chọn đúng** — rẻ tương đương `g4dn.xlarge`, không cần quota đặc biệt, và GPU gần như không mang lại lợi ích. GPU chỉ cần thiết cho Deep Learning / LLM (Phần 3–4).
 
 ---
 
